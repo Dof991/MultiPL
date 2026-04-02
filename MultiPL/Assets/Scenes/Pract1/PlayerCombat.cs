@@ -1,75 +1,69 @@
 using Unity.Netcode;
 using UnityEngine;
+using UnityEngine.InputSystem; 
 
 public class PlayerCombat : NetworkBehaviour
 {
-    [SerializeField] private PlayerNetwork playerNetwork;
-    [SerializeField] private int damage = 10;
-    private PlayerNetwork _target;
-    private Action _control;
-    [SerializeField] private Rigidbody rb;
+    [SerializeField] private PlayerNetwork _playerNetwork;
+    [SerializeField] private int _damage = 10;
+    [SerializeField] private float _attackRange = 5f;
 
-    
-    private void Awake()
-    {
-        _control = new Action();
-        _control.Enable();
-        _control.Player.Attack.started += ctx => TryAttack();
+    private Camera _mainCamera;
 
-    }
-    private void OnTriggerEnter(Collider other)
+    private void Start()
     {
-        Debug.Log("Collis");
-        if (!IsServer) return;
-        _target = other.gameObject.GetComponent<PlayerNetwork>();
+        _mainCamera = Camera.main;
     }
 
-    private void OnTriggerExit(Collider other)
+    private void Update()
     {
-        if (!IsServer) return;
-        _target = null;
+        if (!IsOwner) return;
+
+        if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+        {
+            PerformAttack();
+        }
     }
-    
 
-    public void TryAttack()
+    private void PerformAttack()
     {
-        
-        Debug.Log(_target);
+        Vector2 mousePos = Mouse.current.position.ReadValue();
+        Ray ray = _mainCamera.ScreenPointToRay(mousePos);
 
-        // Атаку инициирует только локальный владелец объекта.
-        if (!IsOwner || _target == null)
-            return;
-        DealDamageServerRpc(_target.NetworkObjectId, damage);
+        if (Physics.Raycast(ray, out RaycastHit hit, _attackRange))
+        {
+            PlayerNetwork targetNetwork = hit.collider.GetComponent<PlayerNetwork>();
+            
+            if (targetNetwork != null)
+            {
+                Debug.Log($"Нашел цель: {targetNetwork.name}"); 
+                TryAttack(targetNetwork);
+            }
+            else
+            {
+                Debug.Log("Луч прошел мимо");
+            }
+        }
+    }
+
+    public void TryAttack(PlayerNetwork target)
+    {
+        if (!IsOwner || target == null) return;
+        Debug.Log("TryAttack");
+        DealDamageServerRpc(target.NetworkObjectId, _damage);
     }
 
     [ServerRpc]
-    private void DealDamageServerRpc(ulong targetObjectId, int inputDamage)
+    private void DealDamageServerRpc(ulong targetObjectId, int damage)
     {
-        Debug.Log(targetObjectId);
-        
-        // Сервер проверяет, существует ли цель среди заспавненных сетевых объектов.
         if (!NetworkManager.SpawnManager.SpawnedObjects.TryGetValue(targetObjectId, out NetworkObject targetObject))
             return;
+
+        PlayerNetwork targetPlayer = targetObject.GetComponent<PlayerNetwork>();
         
+        if (targetPlayer == null || targetPlayer == _playerNetwork) return;
 
-        // Запрещаем урон самому себе и удары по некорректной цели.
-        if (_target == null || _target == playerNetwork)
-            return;
-
-        // Итоговое значение HP ограничиваем снизу нулем.
-        int nextHp = Mathf.Max(0, _target.HP.Value - inputDamage);
-        _target.HP.Value = nextHp;
-
-        // Jump();
-    }
-
-    void Jump()
-    {
-        rb.AddForce(Vector3.up*5);
-    }
-    
-    private void OnDisable()
-    {
-        _control.Disable();
+        int nextHp = Mathf.Max(0, targetPlayer.HP.Value - damage);
+        targetPlayer.HP.Value = nextHp;
     }
 }
