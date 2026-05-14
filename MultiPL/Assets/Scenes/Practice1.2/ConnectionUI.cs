@@ -1,7 +1,7 @@
-using TMPro;
-using UnityEngine;
 using FishNet;
 using FishNet.Transporting;
+using TMPro;
+using UnityEngine;
 
 public class ConnectionUI : MonoBehaviour
 {

@@ -1,48 +1,49 @@
-using TMPro;
-using UnityEngine;
 using FishNet.Object;
+using FishNet.Object.Synchronizing;
+using UnityEngine;
+using UnityEngine.InputSystem;
 
-public class PlayerView : NetworkBehaviour
+public class PlayerShooting : NetworkBehaviour
 {
+    public readonly SyncVar<int> Ammo = new SyncVar<int>();
+    
+    [SerializeField] private int _maxAmmo = 30;
+    [SerializeField] private GameObject _projectilePrefab;
+    [SerializeField] private Transform _firePoint;
+    [SerializeField] private float _cooldown = 0.5f;
+
+    private float _lastShotTime;
     private PlayerNetwork _playerNetwork;
 
-    [SerializeField] private TMP_Text _nicknameText;
-    [SerializeField] private TMP_Text _hpText;
-
-    private string _lastNick;
-    private int _lastHp;
-
-    private void Awake()
+    public override void OnStartNetwork()
     {
         _playerNetwork = GetComponent<PlayerNetwork>();
-    }
-
-    public override void OnStartClient()
-    {
-        base.OnStartClient();
-        RefreshUI();
+        if (IsServerInitialized) Ammo.Value = _maxAmmo; 
     }
 
     private void Update()
     {
-        RefreshUI();
+        if (!IsOwner || !_playerNetwork.IsAlive.Value) return;
+
+        bool isShooting = Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame;
+
+        if (isShooting && Ammo.Value > 0)
+        {
+            Shoot(_firePoint.position, transform.forward);
+        }
     }
 
-    private void RefreshUI()
+    [ServerRpc]
+    private void Shoot(Vector3 pos, Vector3 dir)
     {
-        if (_playerNetwork == null)
-            return;
+        if (!_playerNetwork.IsAlive.Value || Ammo.Value <= 0 || Time.time < _lastShotTime + _cooldown) return;
 
-        if (_playerNetwork.Nickname.Value != _lastNick)
-        {
-            _lastNick = _playerNetwork.Nickname.Value;
-            _nicknameText.text = _lastNick;
-        }
+        _lastShotTime = Time.time;
+        Ammo.Value--; 
 
-        if (_playerNetwork.HP.Value != _lastHp)
-        {
-            _lastHp = _playerNetwork.HP.Value;
-            _hpText.text = $"HP: {_lastHp}";
-        }
+        GameObject go = Instantiate(_projectilePrefab, pos, Quaternion.LookRotation(dir));
+        var no = go.GetComponent<NetworkObject>();
+        ServerManager.Spawn(go, Owner);
+        
     }
 }

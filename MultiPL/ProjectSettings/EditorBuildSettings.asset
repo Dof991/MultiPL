@@ -8,6 +8,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Practice1.2/Practi2.unity
     guid: 5a46f80deb4f4324289987863804105a
+  - enabled: 1
+    path: Assets/Scenes/Practice1.2/Practi3.unity
+    guid: f80a7b3039fc55e4da15d3c6ab57ec28
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   m_UseUCBPForAssetBundles: 0
