@@ -1,4 +1,4 @@
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 [RequireComponent(typeof(CharacterController))]
@@ -17,7 +17,7 @@ public class PlayerMovement : NetworkBehaviour
 
     private PlayerNetwork _player;
 
-    private void Awake()
+    public override void OnStartNetwork()
     {
         _control = new ActionMaps();
         _control.Enable();
@@ -26,7 +26,7 @@ public class PlayerMovement : NetworkBehaviour
         _player = GetComponent<PlayerNetwork>();
     }
 
-    private void OnDisable()
+    public override void OnStopNetwork()
     {
         _control.Disable();
     }
@@ -36,11 +36,11 @@ public class PlayerMovement : NetworkBehaviour
         OnMovement();
     }
 
+
     private void OnMovement()
     {
         if (IsOwner && _player.IsAlive.Value)
         {
-
             _inputDir_XZ = _control.Player.Move.ReadValue<Vector2>();
 
             _movingDir = new Vector3(_inputDir_XZ.y * transform.forward.x, 0, _inputDir_XZ.y * transform.forward.z);

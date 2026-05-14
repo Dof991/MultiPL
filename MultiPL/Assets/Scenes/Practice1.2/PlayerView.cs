@@ -1,39 +1,48 @@
 using TMPro;
-using Unity.Netcode;
 using UnityEngine;
-using Unity.Collections;
+using FishNet.Object;
 
 public class PlayerView : NetworkBehaviour
 {
-    [SerializeField] private PlayerNetwork _playerNetwork;
+    private PlayerNetwork _playerNetwork;
+
     [SerializeField] private TMP_Text _nicknameText;
     [SerializeField] private TMP_Text _hpText;
 
-    public override void OnNetworkSpawn()
-    {
-        // Подписываемся на изменения только после сетевого спавна объекта.
-        _playerNetwork.Nickname.OnValueChanged += OnNicknameChanged;
-        _playerNetwork.HP.OnValueChanged += OnHpChanged;
+    private string _lastNick;
+    private int _lastHp;
 
-        // Сразу рисуем текущее состояние, чтобы UI не ждал первого сетевого события.
-        OnNicknameChanged(default, _playerNetwork.Nickname.Value);
-        OnHpChanged(0, _playerNetwork.HP.Value);
+    private void Awake()
+    {
+        _playerNetwork = GetComponent<PlayerNetwork>();
     }
 
-    public override void OnNetworkDespawn()
+    public override void OnStartClient()
     {
-        // Отписка обязательна, чтобы не оставлять "висячие" обработчики.
-        _playerNetwork.Nickname.OnValueChanged -= OnNicknameChanged;
-        _playerNetwork.HP.OnValueChanged -= OnHpChanged;
+        base.OnStartClient();
+        RefreshUI();
     }
 
-    private void OnNicknameChanged(FixedString32Bytes oldValue, FixedString32Bytes newValue)
+    private void Update()
     {
-        _nicknameText.text = newValue.ToString();
+        RefreshUI();
     }
 
-    private void OnHpChanged(int oldValue, int newValue)
+    private void RefreshUI()
     {
-        _hpText.text = $"HP: {newValue}";
+        if (_playerNetwork == null)
+            return;
+
+        if (_playerNetwork.Nickname.Value != _lastNick)
+        {
+            _lastNick = _playerNetwork.Nickname.Value;
+            _nicknameText.text = _lastNick;
+        }
+
+        if (_playerNetwork.HP.Value != _lastHp)
+        {
+            _lastHp = _playerNetwork.HP.Value;
+            _hpText.text = $"HP: {_lastHp}";
+        }
     }
 }

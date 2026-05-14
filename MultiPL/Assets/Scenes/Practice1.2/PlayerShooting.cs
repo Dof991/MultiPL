@@ -1,77 +1,48 @@
-using Unity.Netcode;
+using TMPro;
 using UnityEngine;
+using FishNet.Object;
 
-public class PlayerShooting : NetworkBehaviour
+public class PlayerView : NetworkBehaviour
 {
-    [Header("Shooting")]
-    [SerializeField] private GameObject projectilePrefab;
-    [SerializeField] private Transform firePoint;
-    [SerializeField] private float cooldown = 0.4f;
-    [SerializeField] private int maxAmmo = 10;
+    private PlayerNetwork _playerNetwork;
 
-    private float _lastShotTime;
-    private int _currentAmmo;
+    [SerializeField] private TMP_Text _nicknameText;
+    [SerializeField] private TMP_Text _hpText;
 
-    private PlayerNetwork _player;
-    private ActionMaps _control;
+    private string _lastNick;
+    private int _lastHp;
 
     private void Awake()
     {
-        _control = new ActionMaps();
+        _playerNetwork = GetComponent<PlayerNetwork>();
     }
 
-    public override void OnNetworkSpawn()
+    public override void OnStartClient()
     {
-        _currentAmmo = maxAmmo;
-        _player = GetComponent<PlayerNetwork>();
+        base.OnStartClient();
+        RefreshUI();
+    }
 
-        
-        if (!IsOwner)
-        {
-            _control.Disable();
+    private void Update()
+    {
+        RefreshUI();
+    }
+
+    private void RefreshUI()
+    {
+        if (_playerNetwork == null)
             return;
-        }
 
-        _control.Enable();
-
-        // Подписка на стрельбу
-        _control.Player.Shoot.started += OnShoot;
-    }
-
-    private void OnDestroy()
-    {
-        if (_control != null)
+        if (_playerNetwork.Nickname.Value != _lastNick)
         {
-            _control.Player.Shoot.started -= OnShoot;
+            _lastNick = _playerNetwork.Nickname.Value;
+            _nicknameText.text = _lastNick;
         }
-    }
 
-    private void OnShoot(UnityEngine.InputSystem.InputAction.CallbackContext ctx)
-    {
-        
-        if (!IsOwner) return;
-
-        // Можно добавить клиентскую проверку кулдауна (чтобы не спамить RPC)
-        if (Time.time < _lastShotTime + cooldown) return;
-
-        ShootServerRpc(firePoint.position, firePoint.forward);
-    }
-
-    [ServerRpc]
-    private void ShootServerRpc(Vector3 pos, Vector3 dir, ServerRpcParams rpc = default)
-    {
-        
-
-        if (_player == null || !_player.IsAlive.Value) return;
-        if (_currentAmmo <= 0) return;
-        if (Time.time < _lastShotTime + cooldown) return;
-
-        _lastShotTime = Time.time;
-        _currentAmmo--;
-
-        var go = Instantiate(projectilePrefab, pos + dir * 1.2f, Quaternion.LookRotation(dir));
-
-        var no = go.GetComponent<NetworkObject>();
-        no.SpawnWithOwnership(rpc.Receive.SenderClientId);
+        if (_playerNetwork.HP.Value != _lastHp)
+        {
+            _lastHp = _playerNetwork.HP.Value;
+            _hpText.text = $"HP: {_lastHp}";
+        }
     }
 }

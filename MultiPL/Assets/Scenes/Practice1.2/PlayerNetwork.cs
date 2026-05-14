@@ -1,127 +1,49 @@
-using Unity.Collections;
-using System.Collections;
-using Unity.Netcode;
+using FishNet.Object;
+using FishNet.Object.Synchronizing;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
-public class PlayerNetwork : NetworkBehaviour
+public class PlayerShooting : NetworkBehaviour
 {
-    public NetworkVariable<FixedString32Bytes> Nickname = new(
-        default,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
+    public readonly SyncVar<int> Ammo = new SyncVar<int>();
 
-    public NetworkVariable<int> HP = new(
-        100,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
+    [SerializeField] private int _maxAmmo = 30;
+    [SerializeField] private GameObject _projectilePrefab;
+    [SerializeField] private Transform _firePoint;
+    [SerializeField] private float _cooldown = 0.5f;
 
-    public NetworkVariable<bool> IsAlive = new(
-        true,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
+    private float _lastShotTime;
+    private PlayerNetwork _playerNetwork;
 
-    [SerializeField] private Transform[] spawnPoints;
-    [SerializeField] private GameObject playerBody;
-
-    private Vector3 _deathPosition;
-
-    public override void OnNetworkSpawn()
+    public override void OnStartNetwork()
     {
-        if (IsOwner)
+        _playerNetwork = GetComponent<PlayerNetwork>();
+        if (IsServerInitialized) Ammo.Value = _maxAmmo;
+    }
+
+    private void Update()
+    {
+        if (!IsOwner || !_playerNetwork.IsAlive.Value) return;
+
+        bool isShooting = Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame;
+
+        if (isShooting && Ammo.Value > 0)
         {
-            SubmitNicknameServerRpc(ConnectionUI.PlayerNickname);
-        }
-
-        if (IsServer)
-        {
-            HP.Value = 100;
-            IsAlive.Value = true;
-        }
-
-        HP.OnValueChanged += OnHpChanged;
-        IsAlive.OnValueChanged += OnIsAliveChanged;
-
-        ToggleVisual(IsAlive.Value);
-    }
-
-    public override void OnNetworkDespawn()
-    {
-        HP.OnValueChanged -= OnHpChanged;
-        IsAlive.OnValueChanged -= OnIsAliveChanged;
-    }
-
-    [ServerRpc(RequireOwnership = false)]
-    private void SubmitNicknameServerRpc(string nickname)
-    {
-        string safeValue = string.IsNullOrWhiteSpace(nickname)
-            ? $"Player_{OwnerClientId}"
-            : nickname.Trim();
-
-        Nickname.Value = safeValue;
-    }
-
-    public void TakeDamage(int damage)
-    {
-        if (!IsServer) return;
-        if (!IsAlive.Value) return;
-
-        HP.Value = Mathf.Max(0, HP.Value - damage);
-    }
-
-    private void OnHpChanged(int prev, int next)
-    {
-        if (!IsServer) return;
-
-        if (next <= 0 && IsAlive.Value)
-        {
-            _deathPosition = transform.position;
-
-            IsAlive.Value = false;
-            StartCoroutine(RespawnRoutine());
+            Shoot(_firePoint.position, transform.forward);
         }
     }
 
-    private void OnIsAliveChanged(bool prev, bool next)
+    [ServerRpc]
+    private void Shoot(Vector3 pos, Vector3 dir)
     {
-        ToggleVisual(next);
-    }
+        if (!_playerNetwork.IsAlive.Value || Ammo.Value <= 0 || Time.time < _lastShotTime + _cooldown) return;
 
-    private void ToggleVisual(bool isAlive)
-    {
-        if (playerBody != null)
-            playerBody.SetActive(isAlive);
+        _lastShotTime = Time.time;
+        Ammo.Value--;
 
-        var cc = GetComponent<CharacterController>();
-        if (cc != null)
-            cc.enabled = isAlive;
-    }
+        GameObject go = Instantiate(_projectilePrefab, pos, Quaternion.LookRotation(dir));
+        var no = go.GetComponent<NetworkObject>();
+        ServerManager.Spawn(go, Owner);
 
-    private IEnumerator RespawnRoutine()
-    {
-        yield return new WaitForSeconds(3f);
-
-        Vector3 spawnPos = _deathPosition;
-
-        HP.Value = 100;
-        IsAlive.Value = true;
-
-        RespawnClientRpc(spawnPos);
-    }
-
-    [ClientRpc]
-    private void RespawnClientRpc(Vector3 newPos)
-    {
-        var cc = GetComponent<CharacterController>();
-
-        if (cc != null) cc.enabled = false;
-
-        transform.position = newPos;
-
-        Physics.SyncTransforms();
-
-        if (cc != null) cc.enabled = true;
     }
 }
